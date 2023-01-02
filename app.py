@@ -2,6 +2,7 @@ import pandas as pd
 from flask import Flask, render_template, request
 from flask_cors import cross_origin
 import requests
+import mongo_db
 from bs4 import BeautifulSoup
 from urllib.request import urlopen as url_request
 
@@ -38,10 +39,6 @@ def save_to_csv(summary_product_data):
     data_file.to_csv(filename, index=False, header=headers)
 
 
-def print_error(e):
-    print('Caught this error: ' + repr(e))
-
-
 @app.route('/', methods=['GET'])
 @cross_origin()
 def home_page():
@@ -63,30 +60,34 @@ def index():
 
     if request.method == 'POST':
         try:
+            database = mongo_db.auth_to_mongo_db()
+            collection = mongo_db.create_collection(database)
+
             comments_from_card = prepare_link_for_parsing(product_link).find_all('div', {'class': "_16PBlm"})
             for single_comment in comments_from_card:
                 try:
                     name = single_comment.div.div.find_all('p', {'class': '_2sc7ZR _2V5EHH'})[0].text
                 except Exception as e:
                     name = 'No Name'
-                    print_error(e)
+                    print('Caught this error: ' + repr(e))
 
                 try:
                     rating = single_comment.div.div.div.div.text
                 except Exception as e:
                     rating = 'No Rating'
-                    print_error(e)
+                    print('Caught this error: ' + repr(e))
 
                 try:
                     header = single_comment.div.div.div.p.text
                 except Exception as e:
                     header = 'No Comment Heading'
-                    print_error(e)
+                    print('Caught this error: ' + repr(e))
 
                 try:
                     text = (single_comment.div.div.find_all('div', {'class': ''}))
                     text = text[0].div.text
                 except Exception as e:
+                    text = "No text"
                     print("Exception while creating dictionary: ", e)
 
                 product_data = {"Product": get_search_substring(),
@@ -95,6 +96,7 @@ def index():
                                 "CommentHead": header,
                                 "Comment": text
                                 }
+                mongo_db.insert_into_collection(collection, product_data)
                 summary_product_data.append(product_data)
 
             save_to_csv(summary_product_data)
